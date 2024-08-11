@@ -64,7 +64,7 @@ std::string CTxOut::ToString() const
 }
 
 CMutableTransaction::CMutableTransaction() : nVersion(CTransaction::CURRENT_VERSION), nLockTime(0) {}
-CMutableTransaction::CMutableTransaction(const CTransaction& tx) : vin(tx.vin), vout(tx.vout), nVersion(tx.nVersion), nLockTime(tx.nLockTime) {}
+CMutableTransaction::CMutableTransaction(const CTransaction& tx) : vin(tx.vin), vout(tx.vout), nVersion(tx.nVersion), nLockTime(tx.nLockTime), vTickets(tx.vTickets) {}
 
 Txid CMutableTransaction::GetHash() const
 {
@@ -91,9 +91,14 @@ Wtxid CTransaction::ComputeWitnessHash() const
 
     return Wtxid::FromUint256((HashWriter{} << TX_WITH_WITNESS(*this)).GetHash());
 }
+    
+Txid CTransaction::ComputePureHash() const 
+{
+    return Txid::FromUint256((HashWriter{} << TX_NO_TICKETS(*this)).GetHash());
+}
 
-CTransaction::CTransaction(const CMutableTransaction& tx) : vin(tx.vin), vout(tx.vout), nVersion(tx.nVersion), nLockTime(tx.nLockTime), m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
-CTransaction::CTransaction(CMutableTransaction&& tx) : vin(std::move(tx.vin)), vout(std::move(tx.vout)), nVersion(tx.nVersion), nLockTime(tx.nLockTime), m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()} {}
+CTransaction::CTransaction(const CMutableTransaction& tx) : vin(tx.vin), vout(tx.vout), nVersion(tx.nVersion), nLockTime(tx.nLockTime), vTickets(tx.vTickets), m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()}, m_pure_hash{ComputePureHash()} {}
+CTransaction::CTransaction(CMutableTransaction&& tx) : vin(std::move(tx.vin)), vout(std::move(tx.vout)), nVersion(tx.nVersion), nLockTime(tx.nLockTime), vTickets(tx.vTickets), m_has_witness{ComputeHasWitness()}, hash{ComputeHash()}, m_witness_hash{ComputeWitnessHash()}, m_pure_hash{ComputePureHash()} {}
 
 CAmount CTransaction::GetValueOut() const
 {

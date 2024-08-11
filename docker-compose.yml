@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  poas-node1:
+    image: poas-node:latest
+    container_name: poas-node1
+    ports:
+      - "18332:18332"
+      - "18333:18333"
+    expose:
+      - 18333
+    volumes:
+      - .:/usr/src/bitcoin
+      - poas-node1-data:/usr/src/bitcoin/.bitcoin
+    command: ["-regtest", "-reindex", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18332", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333"]
+    # networks:
+    #   - bitcoinnet
+
+  # poas-node2:
+  #   image: poas-node:latest
+  #   container_name: poas-node2
+  #   ports:
+  #     - "18334:18332"
+  #     - "18335:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - poas-node2-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-reindex", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18334", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=leader5:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # poas-node3:
+  #   image: poas-node:latest
+  #   container_name: poas-node3
+  #   ports:
+  #     - "18336:18332"
+  #     - "18337:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - poas-node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-reindex", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18336", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=leader5:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+    # networks:
+    #   - bitcoinnet
+
+  # leader1:
+  #   image: poas-node:latest
+  #   container_name: leader1
+  #   ports:
+  #     - "18338:18332"
+  #     - "18339:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader5:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # leader2:
+  #   image: poas-node:latest
+  #   container_name: leader2
+  #   ports:
+  #     - "18340:18332"
+  #     - "18341:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader5:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # leader3:
+  #   image: poas-node:latest
+  #   container_name: leader3
+  #   ports:
+  #     - "18342:18332"
+  #     - "18343:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader5:18333", "-addnode=leader4:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # leader4:
+  #   image: poas-node:latest
+  #   container_name: leader4
+  #   ports:
+  #     - "18344:18332"
+  #     - "18345:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader5:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # leader5:
+  #   image: poas-node:latest
+  #   container_name: leader5
+  #   ports:
+  #     - "18346:18332"
+  #     - "18347:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=member1:18333", "-addnode=member2:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # member1:
+  #   image: poas-node:latest
+  #   container_name: member1
+  #   ports:
+  #     - "18348:18332"
+  #     - "18349:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=leader5:18333", "-addnode=member3:18333", "-addnode=member2:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # member2:
+  #   image: poas-node:latest
+  #   container_name: member2
+  #   ports:
+  #     - "18350:18332"
+  #     - "18351:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=leader5:18333", "-addnode=member1:18333", "-addnode=member3:18333"]
+  #   # networks:
+  #   #   - bitcoinnet
+
+  # member3:
+  #   image: poas-node:latest
+  #   container_name: member3
+  #   ports:
+  #     - "18352:18332"
+  #     - "18353:18333"
+  #   expose:
+  #     - 18333
+  #   volumes:
+  #     - .:/usr/src/bitcoin
+  #     - node3-data:/usr/src/bitcoin/.bitcoin
+  #   command: ["-regtest", "-printtoconsole", "-rpcuser=user", "-rpcpassword=pass", "-rpcallowip=::/0", "-rpcbind=0.0.0.0", "-rpcport=18338", "-listen=1", "-discover=1", "-fallbackfee=0.0002", "-addnode=bitcoin-node1:18333", "-addnode=bitcoin-node2:18333", "-addnode=bitcoin-node3:18333", "-addnode=leader1:18333", "-addnode=leader2:18333", "-addnode=leader3:18333", "-addnode=leader4:18333", "-addnode=leader5:18333", "-addnode=member1:18333", "-addnode=member2:18333"]
+  #   # networks:
+    #   - bitcoinnet
+      
+# networks:
+#   bitcoinnet:
+#     external:
+#       name: poas_bitcoinnet
+
+volumes:
+  poas-node1-data:
+  poas-node2-data:
+  poas-node3-data:

@@ -33,6 +33,8 @@ typedef uint256 ChainCode;
 class CPubKey
 {
 public:
+    bool VerifySchnorrSignature(const uint256& hash, const std::vector<unsigned char>& vchSig) const;
+public:
     /**
      * secp256k1:
      */

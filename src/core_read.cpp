@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <string>
+#include <logging.h>
 
 namespace {
 class OpCodeParser
@@ -145,7 +146,8 @@ static bool DecodeTx(CMutableTransaction& tx, const std::vector<unsigned char>& 
         try {
             ssData >> TX_WITH_WITNESS(tx_extended);
             if (ssData.empty()) ok_extended = true;
-        } catch (const std::exception&) {
+        // } catch (const std::exception&) {
+        } catch (const std::ios_base::failure& e) {
             // Fall through.
         }
     }

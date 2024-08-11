@@ -23,6 +23,9 @@
 #include <string>
 #include <vector>
 
+#include <primitives/support.h>
+#include <logging.h>
+
 UniValue ValueFromAmount(const CAmount amount)
 {
     static_assert(COIN > 1);
@@ -174,6 +177,7 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
 
     entry.pushKV("txid", tx.GetHash().GetHex());
     entry.pushKV("hash", tx.GetWitnessHash().GetHex());
+    entry.pushKV("purehash", tx.GetPureHash().GetHex());
     // Transaction version is actually unsigned in consensus checks, just signed in memory,
     // so cast to unsigned before giving it to the user.
     entry.pushKV("version", static_cast<int64_t>(static_cast<uint32_t>(tx.nVersion)));
@@ -198,6 +202,8 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
         } else {
             in.pushKV("txid", txin.prevout.hash.GetHex());
             in.pushKV("vout", (int64_t)txin.prevout.n);
+            // in.pushKV("nType", (int64_t)txin.prevout.nType);
+            in.pushKV("nType", (int64_t)txin.prevout.n);
             UniValue o(UniValue::VOBJ);
             o.pushKV("asm", ScriptToAsmStr(txin.scriptSig, true));
             o.pushKV("hex", HexStr(txin.scriptSig));
@@ -266,4 +272,35 @@ void TxToUniv(const CTransaction& tx, const uint256& block_hash, UniValue& entry
     if (include_hex) {
         entry.pushKV("hex", EncodeHexTx(tx)); // The hex-encoded transaction. Used the name "hex" to be consistent with the verbose output of "getrawtransaction".
     }
+
+    UniValue vTickets(UniValue::VARR);
+    for (unsigned int i = 0; i < tx.vTickets.size(); i++) {
+        const CSupportTicket& st = tx.vTickets[i];
+        
+        // std::cout << "\nsupported Hash:\n";
+        // std::cout << st.supportedHash;
+        // std::cout << "\nHex:\n";
+        // std::cout << st.GetHash().GetHex();
+        // std::cout << "\ng_worker_pubkey: \n";
+        // std::cout << st.workerPubKey;
+        // std::cout << "\ng_support_pubkey: \n";
+        // std::cout << st.supportPubKey;
+        // std::cout << "\nTimestamp: \n";
+        // std::cout << st.timestamp;
+        // std::cout << "\nNonce: \n";
+        // std::cout << st.nonce;
+        // std::cout << std::endl;
+
+        UniValue ticket(UniValue::VOBJ);
+
+        ticket.pushKV("supportedHash", HexStr(st.supportedHash));
+        ticket.pushKV("workerPubKey", HexStr(st.workerPubKey));
+        ticket.pushKV("supportPubKey", HexStr(st.supportPubKey));
+        ticket.pushKV("timestamp", (int32_t)st.timestamp);
+        ticket.pushKV("nonce", (int32_t)st.nonce);
+
+        vTickets.push_back(std::move(ticket));
+    }
+    
+    entry.pushKV("vTickets", std::move(vTickets));
 }

@@ -2352,8 +2352,11 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     // Special case for the genesis block, skipping connection of its transactions
     // (its coinbase is unspendable)
     if (block_hash == params.GetConsensus().hashGenesisBlock) {
-        if (!fJustCheck)
-            view.SetBestBlock(pindex->GetBlockHash());
+        // if (!fJustCheck)
+        view.SetBestBlock(pindex->GetBlockHash());
+        const CTransaction &tx = *(block.vtx[0]);
+        CTxUndo undoDummy;
+        UpdateCoins(tx, view, undoDummy, pindex->nHeight);
         return true;
     }
 

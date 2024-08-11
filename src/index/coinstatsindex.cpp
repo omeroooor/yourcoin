@@ -253,7 +253,7 @@ bool CoinStatsIndex::CustomAppend(const interfaces::BlockInfo& block)
 
         std::pair<uint256, DBVal> value;
         if (!db_it.GetValue(value)) {
-            LogError("%s: unable to read value in %s at key (%c, %d)\n",
+            LogError("%s: unable to read value in %s at key (%c, %d) ...5\n",
                          __func__, index_name, DB_BLOCK_HEIGHT, height);
             return false;
         }

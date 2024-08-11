@@ -304,7 +304,7 @@ bool BlockFilterIndex::Write(const BlockFilter& filter, uint32_t block_height, c
 
         std::pair<uint256, DBVal> value;
         if (!db_it.GetValue(value)) {
-            LogError("%s: unable to read value in %s at key (%c, %d)\n",
+            LogError("%s: unable to read value in %s at key (%c, %d) ...1\n",
                          __func__, index_name, DB_BLOCK_HEIGHT, height);
             return false;
         }
@@ -383,7 +383,7 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
 
         size_t i = static_cast<size_t>(height - start_height);
         if (!db_it->GetValue(values[i])) {
-            LogError("%s: unable to read value in %s at key (%c, %d)\n",
+            LogError("%s: unable to read value in %s at key (%c, %d) ...2\n",
                          __func__, index_name, DB_BLOCK_HEIGHT, height);
             return false;
         }
@@ -407,7 +407,7 @@ static bool LookupRange(CDBWrapper& db, const std::string& index_name, int start
         }
 
         if (!db.Read(DBHashKey(block_hash), results[i])) {
-            LogError("%s: unable to read value in %s at key (%c, %s)\n",
+            LogError("%s: unable to read value in %s at key (%c, %s)\n ...4",
                          __func__, index_name, DB_BLOCK_HASH, block_hash.ToString());
             return false;
         }

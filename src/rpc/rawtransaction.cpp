@@ -46,11 +46,19 @@
 
 #include <univalue.h>
 
+#include <pubkey.h>
+#include <string>
+
 using node::AnalyzePSBT;
 using node::FindCoins;
 using node::GetTransaction;
 using node::NodeContext;
 using node::PSBTAnalysis;
+
+
+extern std::string g_support_status;
+extern std::string g_worker_pubkey;
+extern std::string  g_support_pubkey;
 
 static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry,
                      Chainstate& active_chainstate, const CTxUndo* txundo = nullptr,
@@ -97,6 +105,7 @@ static std::vector<RPCResult> DecodeTxDoc(const std::string& txid_field_doc)
     return {
         {RPCResult::Type::STR_HEX, "txid", txid_field_doc},
         {RPCResult::Type::STR_HEX, "hash", "The transaction hash (differs from txid for witness transactions)"},
+        {RPCResult::Type::STR_HEX, "purehash", "The transaction hash (without tickets)"},
         {RPCResult::Type::NUM, "size", "The serialized transaction size"},
         {RPCResult::Type::NUM, "vsize", "The virtual transaction size (differs from size for witness transactions)"},
         {RPCResult::Type::NUM, "weight", "The transaction's weight (between vsize*4-3 and vsize*4)"},
@@ -109,6 +118,7 @@ static std::vector<RPCResult> DecodeTxDoc(const std::string& txid_field_doc)
                 {RPCResult::Type::STR_HEX, "coinbase", /*optional=*/true, "The coinbase value (only if coinbase transaction)"},
                 {RPCResult::Type::STR_HEX, "txid", /*optional=*/true, "The transaction id (if not coinbase transaction)"},
                 {RPCResult::Type::NUM, "vout", /*optional=*/true, "The output number (if not coinbase transaction)"},
+                {RPCResult::Type::NUM, "nType", /*optional=*/true, "The type of the prevout (utxo/ticket)"},
                 {RPCResult::Type::OBJ, "scriptSig", /*optional=*/true, "The script (if not coinbase transaction)",
                 {
                     {RPCResult::Type::STR, "asm", "Disassembly of the signature script"},
@@ -128,6 +138,17 @@ static std::vector<RPCResult> DecodeTxDoc(const std::string& txid_field_doc)
                 {RPCResult::Type::STR_AMOUNT, "value", "The value in " + CURRENCY_UNIT},
                 {RPCResult::Type::NUM, "n", "index"},
                 {RPCResult::Type::OBJ, "scriptPubKey", "", ScriptPubKeyDoc()},
+            }},
+        }},
+        {RPCResult::Type::ARR, "vTickets", "",
+        {
+            {RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::STR_HEX, "supportedHash", "The supported hash"},
+                {RPCResult::Type::STR_HEX, "workerPubKey", "The worker public key"},
+                {RPCResult::Type::STR_HEX, "supportPubKey", "The supported public key"},
+                {RPCResult::Type::NUM, "timestamp", "The ticket time"},
+                {RPCResult::Type::NUM, "nonce", "The ticket nonce"},
             }},
         }},
     };
@@ -2001,6 +2022,372 @@ RPCHelpMan descriptorprocesspsbt()
     };
 }
 
+
+
+std::string bytesToHexString(const std::vector<unsigned char>& bytes) {
+    std::ostringstream oss;
+    oss << std::hex << std::setfill('0');
+    for (const auto& byte : bytes) {
+        oss << std::setw(2) << static_cast<int>(byte);
+    }
+    return oss.str();
+}
+
+void printHex(const std::vector<unsigned char>& bytes) {
+    std::cout << bytesToHexString(bytes) << std::endl;
+}
+
+static RPCHelpMan supportrawtransaction()
+{
+    return RPCHelpMan{"supportrawtransaction",
+                "\nReturn a JSON object representing the serialized, hex-encoded suppport ticket.\n",
+                {
+                    {"hexstring", RPCArg::Type::STR, RPCArg::Optional::NO, "The transaction hex string"},
+                    {"amount", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "The needed support amount (PoW difficulty required as the number of leading zeros)."},
+                },
+                {
+                    RPCResult{
+                        RPCResult::Type::OBJ, "", "", {
+                            {RPCResult::Type::STR, "supportedhash", "The supported transaction id"},
+                            {RPCResult::Type::STR, "workerpubkey", "The worker public key"},
+                            {RPCResult::Type::STR, "supportpubkey", "The supporter public key"},
+                            {RPCResult::Type::NUM, "timestamp", "the support ticket's time"},
+                            {RPCResult::Type::NUM, "nonce", "The PoW solution nonce"},
+                            {RPCResult::Type::STR_HEX, "hash", "The PoW solution"},
+                        }
+                    },
+                },
+                RPCExamples{
+                    HelpExampleCli("supportrawtransaction", "\"hexstring\" 1")
+            + HelpExampleRpc("supportrawtransaction", "\"hexstring\", 1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    try {
+        CMutableTransaction mtx;
+
+        if (!DecodeHexTx(mtx, request.params[0].get_str(), false, true)) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+        }
+
+        CTransaction tx = CTransaction(std::move(mtx));
+        if (tx.IsSupported()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "The provided transaction is already supported");
+        }
+        // Check if support is inactive
+        if (g_support_status == "inactive") {
+            LogPrintf("Support is Inactive\n");
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Support is Inactive");
+        }
+        // Use the global support public key
+        if (g_worker_pubkey.empty()) {
+            LogPrintf("Worker public key is not valid\n");
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Worker public key is not valid");
+        }
+        // Use the global support public key
+        if (g_support_pubkey.empty()) {
+            LogPrintf("Support public key is not valid\n");
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Support public key is not valid");
+        }
+        // Concatenate the transaction hash with the public key
+        uint32_t timestamp = static_cast<uint32_t>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        uint32_t nonce = 0;
+        // Create the support ticket
+        CSupportTicket st(tx.GetPureHash().GetHex(), g_worker_pubkey, g_support_pubkey, timestamp, nonce);
+        if (!request.params[1].isNull())
+            int support_amount = request.params[1].getInt<int>();
+        while (true) {
+            if (st.VerifyPoW(1)) {
+                break;
+            } else {
+                nonce++;
+                st.SetNonce(nonce);
+            }
+        }
+
+        UniValue result(UniValue::VOBJ);
+        result.pushKV("supportedhash", st.supportedHash);
+        result.pushKV("workerpubkey", st.workerPubKey);
+        result.pushKV("supportpubkey", st.supportPubKey);
+        result.pushKV("timestamp", st.timestamp);
+        result.pushKV("nonce", st.nonce);
+        result.pushKV("hash", st.GetHash().GetHex());
+
+        return result;
+    } catch (const std::exception& e) {
+        // Log the exception message for debugging purposes
+        LogPrintf("Exception in supportrawtransaction: %s\n", e.what());
+        // Throw a JSON RPC error with a generic message and include the specific exception
+        throw JSONRPCError(RPC_MISC_ERROR, std::string("Internal error: ") + e.what());
+    }
+},
+    };
+}
+
+
+static RPCHelpMan checktransactionsupport()
+{
+    return RPCHelpMan{"checktransactionsupport",
+                "Return a JSON array all the support ticket of the transaction.\n",
+                {
+                    {"hexstring", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction hex string"},
+                },
+                RPCResult {
+                    RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::ARR, "tickets", "",
+                        {
+                            {RPCResult::Type::OBJ, "", "", 
+                            {
+                                    {RPCResult::Type::STR_HEX, "supportedhash", "The supported transaction id"},
+                                    {RPCResult::Type::STR_HEX, "workerpubkey", "The worker public key"},
+                                    {RPCResult::Type::STR_HEX, "supportpubkey", "The supporter public key"},
+                                    {RPCResult::Type::NUM, "timestamp", "the support ticket's time"},
+                                    {RPCResult::Type::NUM, "nonce", "The PoW solution nonce"},
+                                    {RPCResult::Type::STR_HEX, "hash", "The PoW solution"},
+                            }},
+                        }}
+                    }
+                },
+                RPCExamples{
+                    HelpExampleCli("checktransactionsupport", "\"hexstring\"")
+            + HelpExampleRpc("checktransactionsupport", "\"hexstring\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    try {
+        CMutableTransaction mtx;
+
+        if (!DecodeHexTx(mtx, request.params[0].get_str(), false, true)) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
+        }
+
+        CTransaction tx = CTransaction(std::move(mtx));
+        if (! tx.IsSupported()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "The transaction is not supported");
+        }
+
+        UniValue result(UniValue::VOBJ);
+        UniValue tickets(UniValue::VARR);
+        for (unsigned int i = 0; i < tx.vTickets.size(); i++) {
+            // const CSupportTicket st(HexStr(tx.vTickets[i].supportedHash), HexStr(tx.vTickets[i].workerPubKey), HexStr(tx.vTickets[i].supportPubKey), tx.vTickets[i].timestamp, tx.vTickets[i].nonce);
+            const CSupportTicket st(tx.vTickets[i].supportedHash, tx.vTickets[i].workerPubKey, tx.vTickets[i].supportPubKey, tx.vTickets[i].timestamp, tx.vTickets[i].nonce);
+            
+            // std::cout << "\nsupported Hash:\n";
+            // std::cout << st.supportedHash;
+            // // std::cout << "\n";
+            // // std::cout << HexStr(st.supportedHash);
+            // std::cout << "\nHex:\n";
+            // std::cout << st.GetHash().GetHex();
+            // std::cout << "\ng_worker_pubkey: \n";
+            // std::cout << st.workerPubKey;
+            // // std::cout << "\n";
+            // // std::cout << HexStr(st.workerPubKey);
+            // std::cout << "\ng_support_pubkey: \n";
+            // std::cout << st.supportPubKey;
+            // // std::cout << "\n";
+            // // std::cout << HexStr(st.supportPubKey);
+            // std::cout << "\nTimestamp: \n";
+            // std::cout << st.timestamp;
+            // std::cout << "\nNonce: \n";
+            // std::cout << st.nonce;
+            // std::cout << std::endl;
+            // verify support ticket
+            // if (! st.VerifyPoW()) {
+            //     LogPrintf("one of the provided support tickets is not valid.\n");
+            //     // throw JSONRPCError(RPC_INVALID_PARAMETER, "one of the provided support tickets is not valid");
+            // }
+
+            UniValue ticket(UniValue::VOBJ);
+
+            ticket.pushKV("supportedhash", st.supportedHash);
+            ticket.pushKV("workerpubkey", st.workerPubKey);
+            ticket.pushKV("supportpubkey", st.supportPubKey);
+            ticket.pushKV("timestamp", (int32_t)st.timestamp);
+            ticket.pushKV("nonce", (int32_t)st.nonce);
+            ticket.pushKV("hash", st.GetHash().GetHex());
+
+            tickets.push_back(std::move(ticket));
+        }
+        result.pushKV("tickets", std::move(tickets));
+
+        return result;
+    } catch (const std::exception& e) {
+        // Log the exception message for debugging purposes
+        LogPrintf("Exception in supportrawtransaction: %s\n", e.what());
+        // Throw a JSON RPC error with a generic message and include the specific exception
+        throw JSONRPCError(RPC_MISC_ERROR, std::string("Internal error: ") + e.what());
+    }
+},
+    };
+}
+
+
+
+static RPCHelpMan checkticket()
+{
+    return RPCHelpMan{"checktransactionsupport",
+                "Return a JSON array all the support ticket of the transaction.\n",
+                {
+                    {"supportedhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction hex string"},
+                    {"workerpubkey", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The worjer pubkey"},
+                    {"supportpubkey", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The support pubkey"},
+                    {"timestamp", RPCArg::Type::NUM, RPCArg::Optional::NO, "The timestamp"},
+                    {"nonce", RPCArg::Type::NUM, RPCArg::Optional::NO, "The nonce"},
+                },
+                {
+                    RPCResult{
+                        RPCResult::Type::OBJ, "", "", {
+                            {RPCResult::Type::STR_HEX, "hash", "The ticket hash (indirect)"},
+                            {RPCResult::Type::STR_HEX, "directhash", "The ticket hash (direct)"},
+                        }
+                    },
+                },
+                RPCExamples{
+                    HelpExampleCli("checktransactionsupport", "\"hexstring\"")
+            + HelpExampleRpc("checktransactionsupport", "\"hexstring\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    try {
+        
+        std::string supportedhash = request.params[0].get_str();
+        std::string workerpubkey = request.params[1].get_str();
+        std::string supportpubkey = request.params[2].get_str();
+        uint32_t timestamp = request.params[3].getInt<uint32_t>();
+        uint32_t nonce = request.params[4].getInt<uint32_t>();
+
+        UniValue result(UniValue::VOBJ);
+
+        HashWriter ss;
+        ss << supportedhash << workerpubkey << supportpubkey << timestamp << nonce;
+        result.pushKV("hash", ss.GetHash().GetHex());
+
+        CSupportTicket st(supportedhash, workerpubkey, supportpubkey, timestamp, nonce);
+        result.pushKV("directhash", st.GetHash().GetHex());
+
+        return result;
+    } catch (const std::exception& e) {
+        // Log the exception message for debugging purposes
+        LogPrintf("Exception in supportrawtransaction: %s\n", e.what());
+        // Throw a JSON RPC error with a generic message and include the specific exception
+        throw JSONRPCError(RPC_MISC_ERROR, std::string("Internal error: ") + e.what());
+    }
+},
+    };
+}
+
+
+static RPCHelpMan getsupportinfo()
+{
+    /* Please, avoid using the word "pool" here in the RPC interface or help,
+     * as users will undoubtedly confuse it with the other "memory pool"
+     */
+    return RPCHelpMan{"getsupportinfo",
+                "Returns an object containing information about support pubkeys (Worker & Supporter).\n",
+                {},
+                {
+                    RPCResult{
+                        RPCResult::Type::OBJ, "", "", {
+                            {RPCResult::Type::STR, "status", "The status of the support"},
+                            {RPCResult::Type::STR_HEX, "workerpubkey", "The pubkey used in support"},
+                            {RPCResult::Type::STR_HEX, "supportpubkey", "The pubkey gets the support reward"},
+                        }
+                    },
+                },
+                RPCExamples{
+                    HelpExampleCli("getsupportinfo", "")
+            + HelpExampleRpc("getsupportinfo", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("status", g_support_status);
+    obj.pushKV("workerpubkey", g_worker_pubkey);
+    obj.pushKV("supportpubkey", g_support_pubkey);
+    return obj;
+},
+    };
+}
+
+static RPCHelpMan setsupportstatus()
+{
+    return RPCHelpMan{"setsupportstatus",
+        "\nSets the support status, if set to inactive the node will not participate in the support activites.\n",
+        {
+            {"status", RPCArg::Type::STR, RPCArg::Optional::NO, "The support status."},
+        },
+        RPCResult{
+            RPCResult::Type::NONE, "", "None"},
+        RPCExamples{
+            HelpExampleCli("setsupportstatus", "\"active\"") +
+            HelpExampleRpc("setsupportstatus", "\"inactive\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string value = request.params[0].get_str();
+            if (value == "inactive" || value == "active") {
+                g_support_status = value;
+            }
+            return NullUniValue;
+        },
+    };
+}
+
+static RPCHelpMan setworkerpubkey()
+{
+    return RPCHelpMan{"setworkerpubkey",
+        "\nSets worker public key, this key can be used to proof work done in application layer.\n",
+        {
+            {"workerpubkey", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The worker public key hash."},
+        },
+        RPCResult{
+            RPCResult::Type::NONE, "", "None"},
+        RPCExamples{
+            HelpExampleCli("setworkerpubkey", "") +
+            HelpExampleRpc("setworkerpubkey", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string value = request.params[0].get_str();
+            if (!value.empty()) {
+                g_worker_pubkey = value;
+            } else {
+                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Invalid worker public key hash");
+            }
+            return NullUniValue;
+        },
+    };
+}
+
+static RPCHelpMan setsupportpubkey()
+{
+    return RPCHelpMan{"setsupportpubkey",
+        "\nSets supporter public key, this key can claim the support reward later.\n",
+        {
+            {"supportpubkey", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The supporter public key."},
+        },
+        RPCResult{
+            RPCResult::Type::NONE, "", "None"},
+        RPCExamples{
+            HelpExampleCli("setsupportpubkey", "") +
+            HelpExampleRpc("setsupportpubkey", "")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            std::string value = request.params[0].get_str();
+            if (!value.empty()) {
+                g_support_pubkey = value;
+            } else {
+                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Invalid support public key hash");
+            }
+            return NullUniValue;
+        },
+    };
+}
+
+
 void RegisterRawTransactionRPCCommands(CRPCTable& t)
 {
     static const CRPCCommand commands[]{
@@ -2019,6 +2406,13 @@ void RegisterRawTransactionRPCCommands(CRPCTable& t)
         {"rawtransactions", &descriptorprocesspsbt},
         {"rawtransactions", &joinpsbts},
         {"rawtransactions", &analyzepsbt},
+        {"rawtransactions", &supportrawtransaction},
+        {"support", &getsupportinfo},
+        {"support", &setsupportstatus},
+        {"support", &setworkerpubkey},
+        {"support", &setsupportpubkey},
+        {"support", &checktransactionsupport},
+        {"support", &checkticket},
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

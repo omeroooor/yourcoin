@@ -293,6 +293,38 @@ bool CPubKey::Verify(const uint256 &hash, const std::vector<unsigned char>& vchS
     return secp256k1_ecdsa_verify(secp256k1_context_static, &sig, hash.begin(), &pubkey);
 }
 
+bool CPubKey::VerifySchnorrSignature(const uint256& hash, const std::vector<unsigned char>& vchSig) const {
+    std::vector<unsigned char> pubKeyVec(begin(), end());
+    // Ensure the public key is 33 bytes (compressed format)
+    if (pubKeyVec.size() != 33 || (pubKeyVec[0] != 0x02 && pubKeyVec[0] != 0x03)) {
+        return false;
+    }
+    
+    // Ensure the Schnorr signature size is 64 bytes
+    if (vchSig.size() != 64) {
+        return false;
+    }
+    secp256k1_pubkey secp256k1_pubkey;
+    if (!secp256k1_ec_pubkey_parse(secp256k1_context_static, &secp256k1_pubkey, pubKeyVec.data(), pubKeyVec.size())) {
+        return false;
+    }
+
+    secp256k1_xonly_pubkey xonly_pubkey;
+    if (!secp256k1_xonly_pubkey_from_pubkey(secp256k1_context_static, &xonly_pubkey, nullptr, &secp256k1_pubkey)) {
+        return false;
+    }
+
+    // Verify the Schnorr signature using the secp256k1 library
+    std::vector<unsigned char> hashHex(ParseHex(hash.ToString()));
+    int result = secp256k1_schnorrsig_verify(secp256k1_context_static, vchSig.data(), hashHex.data(), 32, &xonly_pubkey);
+
+    if (result == 1) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 bool CPubKey::RecoverCompact(const uint256 &hash, const std::vector<unsigned char>& vchSig) {
     if (vchSig.size() != COMPACT_SIGNATURE_SIZE)
         return false;

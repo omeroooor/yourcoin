@@ -123,6 +123,21 @@ void AddCoins(CCoinsViewCache& cache, const CTransaction &tx, int nHeight, bool 
         // deal with the pre-BIP30 occurrences of duplicate coinbase transactions.
         cache.AddCoin(COutPoint(txid, i), Coin(tx.vout[i], nHeight, fCoinbase), overwrite);
     }
+    for (size_t i = 0; i < tx.vTickets.size(); ++i) {
+        CSupportTicket st = tx.vTickets[i];
+        size_t j = tx.vout.size();
+        std::string scriptHexString = "0014" + HexStr(st.supportPubKey);
+        std::cout << "\nscriptHexString: \n";
+        std::cout << scriptHexString;
+        std::cout << std::endl;
+        std::vector<unsigned char> scriptBytes(ParseHex(scriptHexString));
+        CScript scriptPubKey = CScript(scriptBytes.begin(), scriptBytes.end());
+        CTxOut txout(st.GetValue(), scriptPubKey);
+        bool overwrite = check_for_overwrite ? cache.HaveCoin(COutPoint(txid, i+j)) : fCoinbase;
+        // Coinbase transactions can always be overwritten, in order to correctly
+        // deal with the pre-BIP30 occurrences of duplicate coinbase transactions.
+        cache.AddCoin(COutPoint(txid, i + j), Coin(txout, nHeight, fCoinbase), overwrite);
+    }
 }
 
 bool CCoinsViewCache::SpendCoin(const COutPoint &outpoint, Coin* moveout) {

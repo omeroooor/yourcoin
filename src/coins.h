@@ -21,6 +21,8 @@
 #include <functional>
 #include <unordered_map>
 
+#include <primitives/support.h>
+
 /**
  * A UTXO entry.
  *
@@ -33,6 +35,7 @@ class Coin
 public:
     //! unspent transaction output
     CTxOut out;
+    CSupportTicket ticket;
 
     //! whether containing transaction was a coinbase
     unsigned int fCoinBase : 1;
@@ -43,9 +46,13 @@ public:
     //! construct a Coin from a CTxOut and height/coinbase information.
     Coin(CTxOut&& outIn, int nHeightIn, bool fCoinBaseIn) : out(std::move(outIn)), fCoinBase(fCoinBaseIn), nHeight(nHeightIn) {}
     Coin(const CTxOut& outIn, int nHeightIn, bool fCoinBaseIn) : out(outIn), fCoinBase(fCoinBaseIn),nHeight(nHeightIn) {}
+    //! construct a coin from a ticket
+    Coin(CSupportTicket&& ticketIn, int nHeightIn, bool fCoinBaseIn) : ticket(std::move(ticketIn)), fCoinBase(fCoinBaseIn), nHeight(nHeightIn) {}
+    Coin(const CSupportTicket& ticketIn, int nHeightIn, bool fCoinBaseIn) : ticket(ticketIn), fCoinBase(fCoinBaseIn), nHeight(nHeightIn) {}
 
     void Clear() {
         out.SetNull();
+        ticket.SetNull();
         fCoinBase = false;
         nHeight = 0;
     }
@@ -57,12 +64,17 @@ public:
         return fCoinBase;
     }
 
+    bool IsTicket() const {
+        return !ticket.IsNull();
+    }
+
     template<typename Stream>
     void Serialize(Stream &s) const {
         assert(!IsSpent());
         uint32_t code = nHeight * uint32_t{2} + fCoinBase;
         ::Serialize(s, VARINT(code));
         ::Serialize(s, Using<TxOutCompression>(out));
+        ::Serialize(s, ticket);
     }
 
     template<typename Stream>
@@ -72,6 +84,7 @@ public:
         nHeight = code >> 1;
         fCoinBase = code & 1;
         ::Unserialize(s, Using<TxOutCompression>(out));
+        ::Unserialize(s, ticket);
     }
 
     /** Either this coin never existed (see e.g. coinEmpty in coins.cpp), or it
@@ -79,6 +92,7 @@ public:
       */
     bool IsSpent() const {
         return out.IsNull();
+        // return out.IsNull() && ticket.IsNull();
     }
 
     size_t DynamicMemoryUsage() const {

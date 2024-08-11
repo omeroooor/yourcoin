@@ -115,6 +115,8 @@ endif
 .PHONY: FORCE check-symbols check-security
 # bitcoin core #
 BITCOIN_CORE_H = \
+  primitives/support.h \
+  globals.h \
   addresstype.h \
   addrdb.h \
   addrman.h \

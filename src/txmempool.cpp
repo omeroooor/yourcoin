@@ -995,6 +995,23 @@ bool CCoinsViewMemPool::GetCoin(const COutPoint &outpoint, Coin &coin) const {
         } else {
             return false;
         }
+        // if (outpoint.nType == 0) {
+        //     if (outpoint.n < ptx->vout.size()) {
+        //         coin = Coin(ptx->vout[outpoint.n], MEMPOOL_HEIGHT, false);
+        //         m_non_base_coins.emplace(outpoint);
+        //         return true;
+        //     } else {
+        //         return false;
+        //     }
+        // } else {
+        //     if (outpoint.n < ptx->vTickets.size()) {
+        //         coin = Coin(ptx->vTickets[outpoint.n], MEMPOOL_HEIGHT, false);
+        //         m_non_base_coins.emplace(outpoint);
+        //         return true;
+        //     } else {
+        //         return false;
+        //     }
+        // }
     }
     return base->GetCoin(outpoint, coin);
 }
@@ -1005,6 +1022,11 @@ void CCoinsViewMemPool::PackageAddTransaction(const CTransactionRef& tx)
         m_temp_added.emplace(COutPoint(tx->GetHash(), n), Coin(tx->vout[n], MEMPOOL_HEIGHT, false));
         m_non_base_coins.emplace(tx->GetHash(), n);
     }
+    // add the ticket-based coins
+    // for (unsigned int n = 0; n < tx->vTickets.size(); ++n) {
+    //     m_temp_added.emplace(COutPoint(tx->GetHash(), n, OutPointType::TICKET), Coin(tx->vTickets[n], MEMPOOL_HEIGHT, false));
+    //     m_non_base_coins.emplace(tx->GetHash(), n, 1);
+    // }
 }
 void CCoinsViewMemPool::Reset()
 {

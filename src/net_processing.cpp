@@ -52,6 +52,7 @@
 #include <optional>
 #include <typeinfo>
 #include <utility>
+#include <globals.h>
 
 /** Headers download timeout.
  *  Timeout = base + per_header * (expected number of headers) */
@@ -3711,6 +3712,21 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
     PeerRef peer = GetPeerRef(pfrom.GetId());
     if (peer == nullptr) return;
 
+    
+    // if (msg_type == NetMsgType::SUPPORTTICKET) {
+    //     LogPrintf("received: %s (%u bytes) peer=%d\n", SanitizeString(msg_type), vRecv.size(), pfrom.GetId());
+    //     LogPrintf("Support ticket has been received from peer=%d\n", pfrom.GetId());
+    //     CSupportTicketRef pst;
+    //     vRecv >> pst;
+        
+    //     LOCK(cs_main);
+    //     if (pst->isValid()) {
+    //         LogPrintf("Received valid support ticket, adding it to the local pool ...");
+    //     }
+
+    //     return;
+    // }
+
     if (msg_type == NetMsgType::VERSION) {
         if (pfrom.nVersion != 0) {
             LogPrint(BCLog::NET, "redundant version message from peer=%d\n", pfrom.GetId());
@@ -4547,6 +4563,9 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
 
         const uint256& txid = ptx->GetHash();
         const uint256& wtxid = ptx->GetWitnessHash();
+
+        // igonre it contains no tickets 
+        if (! ptx->IsSupported()) return;
 
         const uint256& hash = peer->m_wtxid_relay ? wtxid : txid;
         AddKnownTx(*peer, hash);

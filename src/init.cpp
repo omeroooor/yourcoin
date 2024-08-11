@@ -1114,10 +1114,79 @@ bool AppInitInterfaces(NodeContext& node)
     return true;
 }
 
+// support settings
+std::string g_support_status;
+std::string g_worker_pubkey;
+std::string g_support_pubkey;
+std::vector<uint32_t> g_default_tx_support_range;
+
+void LoadSupportStatus() {
+    std::string status = gArgs.GetArg("-supportstatus", "inactive");
+
+    if (status != "inactive") {
+        g_support_status = "active";
+        g_worker_pubkey = "024b4d33bcab5433cfdd76c132e8c3193df2aaec90d9bd07f29c9deec5a8d763a2";
+        g_support_pubkey = "024b4d33bcab5433cfdd76c132e8c3193df2aaec90d9bd07f29c9deec5a8d763a2";
+    }
+    LogPrintf("Support status initialized to: %s\n", g_support_status);
+}
+
+void LoadWorkerKey() {
+    std::string strWorkerPubKey = gArgs.GetArg("-workerpubkey", "");
+    if (!strWorkerPubKey.empty()) {
+        std::vector<unsigned char> pubkey_bytes = ParseHex(strWorkerPubKey);
+        CPubKey wk(pubkey_bytes.begin(), pubkey_bytes.end());
+        if (wk.IsFullyValid()) {
+            g_worker_pubkey = strWorkerPubKey;
+            LogPrintf("Worker public key loaded successfully.\n");
+        } else {
+            LogPrintf("Invalid worker public key.\n");
+            g_worker_pubkey.clear();
+        }
+    } else {
+        LogPrintf("No worker public key provided.\n");
+    }
+}
+
+void LoadSupportKey() {
+    std::string strSupportPubKey = gArgs.GetArg("-supportpubkey", "");
+    if (!strSupportPubKey.empty()) {
+        std::vector<unsigned char> pubkey_bytes = ParseHex(strSupportPubKey);
+        CPubKey sk(pubkey_bytes.begin(), pubkey_bytes.end());
+        if (sk.IsFullyValid()) {
+            g_support_pubkey = strSupportPubKey;
+            LogPrintf("Support public key loaded successfully.\n");
+        } else {
+            LogPrintf("Invalid support public key.\n");
+            g_support_pubkey.clear();
+        }
+    } else {
+        LogPrintf("No support public key provided.\n");
+    }
+}
+
+
+void InitializeDefaultValues()
+{
+    if (gArgs.IsArgSet("-testnet")) {
+        // Testnet default values
+        g_default_tx_support_range = {1, 2, 3};
+    } else if (gArgs.IsArgSet("-regtest")) {
+        // Regtest default values
+        g_default_tx_support_range = {1, 2, 3};
+    } else {
+        // Mainnet default values
+        g_default_tx_support_range = {3, 4, 5};
+    }
+}
+
 bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
 {
     const ArgsManager& args = *Assert(node.args);
     const CChainParams& chainparams = Params();
+
+    // initialize the custom default values
+    InitializeDefaultValues();
 
     auto opt_max_upload = ParseByteUnits(args.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET), ByteUnit::M);
     if (!opt_max_upload) {

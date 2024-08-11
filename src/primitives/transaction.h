@@ -24,31 +24,48 @@
 #include <utility>
 #include <vector>
 
+#include <primitives/support.h>
+#include <logging.h>
+
+
+// Define the OutPointType enum
+enum class OutPointType {
+    OUTPUT,
+    TICKET
+};
+
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
 {
 public:
     Txid hash;
     uint32_t n;
+    // uint32_t nType;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
     COutPoint(): n(NULL_INDEX) { }
     COutPoint(const Txid& hashIn, uint32_t nIn): hash(hashIn), n(nIn) { }
+    // COutPoint(const Txid& hashIn, uint32_t nIn): hash(hashIn), n(nIn), nType(0) { }
+    // COutPoint(const Txid& hashIn, uint32_t nIn, uint32_t nTypeIn): hash(hashIn), n(nIn), nType(nTypeIn) { }
 
     SERIALIZE_METHODS(COutPoint, obj) { READWRITE(obj.hash, obj.n); }
+    // SERIALIZE_METHODS(COutPoint, obj) { READWRITE(obj.hash, obj.n, obj.nType); }
 
     void SetNull() { hash.SetNull(); n = NULL_INDEX; }
+    // void SetNull() { hash.SetNull(); n = NULL_INDEX; nType = 0;}
     bool IsNull() const { return (hash.IsNull() && n == NULL_INDEX); }
 
     friend bool operator<(const COutPoint& a, const COutPoint& b)
     {
         return std::tie(a.hash, a.n) < std::tie(b.hash, b.n);
+        // return std::tie(a.hash, a.n, a.nType) < std::tie(b.hash, b.n, b.nType);
     }
 
     friend bool operator==(const COutPoint& a, const COutPoint& b)
     {
         return (a.hash == b.hash && a.n == b.n);
+        // return (a.hash == b.hash && a.n == b.n && a.nType == b.nType);
     }
 
     friend bool operator!=(const COutPoint& a, const COutPoint& b)
@@ -190,10 +207,12 @@ struct CMutableTransaction;
 
 struct TransactionSerParams {
     const bool allow_witness;
+    const bool allow_tickets;
     SER_PARAMS_OPFUNC
 };
-static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true};
-static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false};
+static constexpr TransactionSerParams TX_WITH_WITNESS{.allow_witness = true, .allow_tickets = true};
+static constexpr TransactionSerParams TX_NO_WITNESS{.allow_witness = false, .allow_tickets = true};
+static constexpr TransactionSerParams TX_NO_TICKETS{.allow_witness = false, .allow_tickets = false};
 
 /**
  * Basic transaction serialization format:
@@ -216,11 +235,12 @@ template<typename Stream, typename TxType>
 void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& params)
 {
     const bool fAllowWitness = params.allow_witness;
-
+    const bool fAllowTickets = params.allow_tickets;
     s >> tx.nVersion;
     unsigned char flags = 0;
     tx.vin.clear();
     tx.vout.clear();
+    tx.vTickets.clear();
     /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
     s >> tx.vin;
     if (tx.vin.size() == 0 && fAllowWitness) {
@@ -250,12 +270,16 @@ void UnserializeTransaction(TxType& tx, Stream& s, const TransactionSerParams& p
         throw std::ios_base::failure("Unknown transaction optional data");
     }
     s >> tx.nLockTime;
+    if (fAllowTickets) {
+        s >> tx.vTickets;
+    }
 }
 
 template<typename Stream, typename TxType>
 void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParams& params)
 {
     const bool fAllowWitness = params.allow_witness;
+    const bool fAllowTickets = params.allow_tickets;
 
     s << tx.nVersion;
     unsigned char flags = 0;
@@ -280,6 +304,9 @@ void SerializeTransaction(const TxType& tx, Stream& s, const TransactionSerParam
         }
     }
     s << tx.nLockTime;
+    if (fAllowTickets) {
+        s << tx.vTickets;
+    }
 }
 
 template<typename TxType>
@@ -307,15 +334,18 @@ public:
     const std::vector<CTxOut> vout;
     const int32_t nVersion;
     const uint32_t nLockTime;
+    const std::vector<CSupportTicket> vTickets; // Support tickts containing hashes
 
 private:
     /** Memory only. */
     const bool m_has_witness;
     const Txid hash;
     const Wtxid m_witness_hash;
+    const Txid m_pure_hash;
 
     Txid ComputeHash() const;
     Wtxid ComputeWitnessHash() const;
+    Txid ComputePureHash() const;
 
     bool ComputeHasWitness() const;
 
@@ -342,6 +372,7 @@ public:
 
     const Txid& GetHash() const LIFETIMEBOUND { return hash; }
     const Wtxid& GetWitnessHash() const LIFETIMEBOUND { return m_witness_hash; };
+    const Txid& GetPureHash() const LIFETIMEBOUND { return m_pure_hash; };
 
     // Return sum of txouts.
     CAmount GetValueOut() const;
@@ -371,6 +402,31 @@ public:
     std::string ToString() const;
 
     bool HasWitness() const { return m_has_witness; }
+
+    bool IsSupported() const
+    {
+        // intiate isValid as `false`, so if there is no tickets it will be returned as false.
+        bool isValid = false;
+        int minimum_support_amount = 1;
+        for (size_t i = 0; i < vTickets.size(); i++) {
+            // if there is only one invalid ticket consider all tickets as invalid.
+            std::cout << "\nSupportedHash: \n";
+            std::cout << vTickets[i].supportedHash;
+            std::cout << "\n";
+            std::cout << HexStr(vTickets[i].supportedHash);
+            std::cout << "\nPureHash: \n";
+            std::cout << GetPureHash().GetHex();
+            std::cout << "\n";
+            std::cout << HexStr(GetPureHash().GetHex());
+            std::cout << std::endl;
+            if (HexStr(vTickets[i].supportedHash) != HexStr(GetPureHash().GetHex()) || !vTickets[i].VerifyPoW(minimum_support_amount)) {
+                return false;
+            }
+            // since at there is on valid ticket mark tx as valid, or where all tickets are valid.
+            isValid = true;
+        }
+        return isValid;
+    }
 };
 
 /** A mutable version of CTransaction. */
@@ -380,6 +436,7 @@ struct CMutableTransaction
     std::vector<CTxOut> vout;
     int32_t nVersion;
     uint32_t nLockTime;
+    std::vector<CSupportTicket> vTickets; // Support list containing hashes
 
     explicit CMutableTransaction();
     explicit CMutableTransaction(const CTransaction& tx);
@@ -417,6 +474,22 @@ struct CMutableTransaction
             }
         }
         return false;
+    }
+
+    bool HasTickets() const
+    {
+        // intiate isValid as `false`, so if there is no tickets it will be returned as false.
+        bool isValid = false;
+        int minimum_support_amount = 1;
+        for (size_t i = 0; i < vTickets.size(); i++) {
+            // if there is only one invalid ticket consider all tickets as invalid.
+            if (vTickets[i].supportedHash != GetHash().GetHex() || !vTickets[i].VerifyPoW(minimum_support_amount)) {
+                return false;
+            }
+            // since at there is on valid ticket mark tx as valid, or where all tickets are valid.
+            isValid = true;
+        }
+        return isValid;
     }
 };
 

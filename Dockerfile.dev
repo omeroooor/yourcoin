@@ -1,0 +1,29 @@
+# Dockerfile
+# Use the previously built base image
+FROM yourcoin-base:latest
+
+# Copy the Bitcoin source code into the container
+COPY . /usr/src/bitcoin
+
+# Set the working directory
+WORKDIR /usr/src/bitcoin
+
+# Ensure all necessary files have correct line endings
+RUN find . -type f -exec dos2unix {} \; && \
+    dos2unix ./autogen.sh && chmod +x ./autogen.sh && \
+    find . -name \*.m4 | xargs dos2unix && \
+    find . -name \*.ac | xargs dos2unix && \
+    find . -name \*.am | xargs dos2unix
+
+# Run the build steps
+RUN ./autogen.sh && \
+    ./configure --with-boost=/usr/local --without-gui --disable-tests --disable-fuzz --disable-bench --enable-debug && \
+    make src/bitcoind -j$(nproc) && \
+    make install
+
+# Expose ports
+EXPOSE 8332 8333 18332 18333
+
+# Run Bitcoin daemon
+ENTRYPOINT ["bitcoind"]
+CMD ["-printtoconsole", "-regtest", "-datadir=/usr/src/bitcoin/.bitcoin", "-rpcallowip=0.0.0.0/0", "-rpcbind=0.0.0.0"]
